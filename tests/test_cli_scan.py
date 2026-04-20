@@ -31,3 +31,5 @@ def test_scan_writes_default_json_and_prints_summary(monkeypatch, tmp_path, caps
 
     stdout = capsys.readouterr().out
     assert "total_skills=1" in stdout
+    assert "skills:" in stdout
+    assert "- brainstorming | conflict=False" in stdout

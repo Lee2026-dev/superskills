@@ -13,6 +13,16 @@ def print_summary(result: ScanResult) -> None:
         f"scanned_dirs={result.summary.scanned_dirs} "
         f"duration_ms={result.summary.duration_ms}"
     )
+    print("skills:")
+    if result.skills:
+        for skill in sorted(result.skills, key=lambda item: (item.name, item.path)):
+            print(
+                f"- {skill.name} | conflict={skill.has_conflict} "
+                f"| source={skill.source_root} | path={skill.path}"
+            )
+    else:
+        print("- (none)")
+
     if result.conflicts:
         print("conflicts:")
         for item in result.conflicts:
