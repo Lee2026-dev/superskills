@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import webbrowser
 from pathlib import Path
 
 from . import git_ops
 from .cache import CacheManager
+from .config import ConfigManager
 from .output import print_summary, write_json
 from .scanner import scan_roots
 from .targets import TargetResolutionError, resolve_skill_target
@@ -130,10 +132,37 @@ def _handle_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_scan(args: argparse.Namespace) -> int:
-    roots = [Path(r) for r in args.root] if args.root else DEFAULT_SCAN_ROOTS
+def _handle_config(args: argparse.Namespace, cm: ConfigManager) -> int:
+    sub = args.config_command
+    if sub == "show":
+        print(json.dumps(cm.to_dict(), indent=2))
+    elif sub == "add-root":
+        if cm.add_root(args.path):
+            print(f"Added scan root: {args.path}")
+        else:
+            print(f"Scan root already exists: {args.path}")
+    elif sub == "remove-root":
+        if cm.remove_root(args.path):
+            print(f"Removed scan root: {args.path}")
+        else:
+            print(f"Scan root not found: {args.path}")
+    elif sub == "add-ignore":
+        if cm.add_ignore(args.pattern):
+            print(f"Added ignore pattern: {args.pattern}")
+        else:
+            print(f"Ignore pattern already exists: {args.pattern}")
+    elif sub == "remove-ignore":
+        if cm.remove_ignore(args.pattern):
+            print(f"Removed ignore pattern: {args.pattern}")
+        else:
+            print(f"Ignore pattern not found: {args.pattern}")
+    return 0
+
+
+def _handle_scan(args: argparse.Namespace, config_manager: ConfigManager) -> int:
+    roots = [Path(r) for r in args.root] if args.root else config_manager.get_roots()
     cache = CacheManager()
-    result = scan_roots(roots, cache_manager=cache, refresh=args.refresh)
+    result = scan_roots(roots, cache_manager=cache, refresh=args.refresh, ignored_dirs=config_manager.get_ignored())
     cache.save()
     print_summary(result)
 
@@ -151,7 +180,7 @@ def _handle_scan(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_serve(args: argparse.Namespace) -> int:
+def _handle_serve(args: argparse.Namespace, config_manager: ConfigManager) -> int:
     from .web.server import serve
 
     host = args.host
@@ -164,7 +193,8 @@ def _handle_serve(args: argparse.Namespace) -> int:
     if not args.no_open:
         webbrowser.open(url)
 
-    httpd = serve(DEFAULT_SCAN_ROOTS, host=host, port=port, refresh=args.refresh)
+    roots = config_manager.get_roots()
+    httpd = serve(roots, host=host, port=port, refresh=args.refresh)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -200,10 +230,29 @@ def main(argv: list[str] | None = None) -> int:
     args_serve.add_argument("--no-open", action="store_true", help="Don't open browser automatically")
     args_serve.add_argument("--refresh", action="store_true", help="Force initial scan to bypass cache")
 
+    # config
+    config_parser = subparsers.add_parser("config", help="Manage persistent configuration")
+    conf_subs = config_parser.add_subparsers(dest="config_command", required=True)
+    
+    conf_subs.add_parser("show", help="Show current configuration")
+    
+    add_root = conf_subs.add_parser("add-root", help="Add a directory to scan roots")
+    add_root.add_argument("path", help="Path to add")
+    
+    rm_root = conf_subs.add_parser("remove-root", help="Remove a directory from scan roots")
+    rm_root.add_argument("path", help="Path to remove")
+    
+    add_ign = conf_subs.add_parser("add-ignore", help="Add a directory name to ignore list")
+    add_ign.add_argument("pattern", help="Directory name to ignore")
+    
+    rm_ign = conf_subs.add_parser("remove-ignore", help="Remove a directory name from ignore list")
+    rm_ign.add_argument("pattern", help="Directory name to remove")
+
     args = parser.parse_args(argv)
+    cm = ConfigManager()
 
     if args.command == "scan":
-        return _handle_scan(args)
+        return _handle_scan(args, cm)
 
     if args.command == "list-versions":
         return _handle_list_versions(args)
@@ -212,7 +261,10 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_upgrade(args)
 
     if args.command == "serve":
-        return _handle_serve(args)
+        return _handle_serve(args, cm)
+    
+    if args.command == "config":
+        return _handle_config(args, cm)
 
     return 1
 

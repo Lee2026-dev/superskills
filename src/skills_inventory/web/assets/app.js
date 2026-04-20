@@ -59,6 +59,9 @@ function buildShell() {
           <a class="nav-item" data-page="log" href="#log">
             <span class="nav-icon">≡</span> 操作日志
           </a>
+          <a class="nav-item" data-page="settings" href="#settings">
+            <span class="nav-icon">⚙</span> 设置
+          </a>
         </nav>
         <div class="sidebar-footer">
           <button class="scan-btn" id="scan-btn" onclick="fetchScan()">↻ 立即扫描</button>
@@ -104,6 +107,7 @@ function route() {
     case 'conflicts': renderConflicts(content); break;
     case 'upgrades':  renderUpgrades(content); break;
     case 'log':       renderLog(content); break;
+    case 'settings':  renderSettings(content); break;
     default:          content.innerHTML = '<p style="color:var(--text-3);padding:40px">Page not found.</p>';
   }
 }
@@ -538,6 +542,111 @@ async function doUpgrade(name, path, btn) {
     toast('请求失败，请重试', 'error');
     btn.disabled = false;
     btn.innerHTML = origText;
+  }
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+async function renderSettings(el) {
+  el.innerHTML = `
+    <header class="content-header">
+      <div class="header-main">
+        <h1 class="header-title">系统设置</h1>
+        <p class="header-subtitle">管理扫描路径和忽略规则</p>
+      </div>
+    </header>
+    <div class="content-body" id="settings-container">
+      ${loadingHTML()}
+    </div>
+  `;
+
+  try {
+    const res = await apiFetch('/api/config');
+    if (!res.ok) throw new Error(res.error);
+    const config = res.data;
+    const container = document.getElementById('settings-container');
+    
+    function draw() {
+      container.innerHTML = `
+        <div class="settings-grid">
+          <section class="settings-card">
+            <h3 class="settings-card-title">扫描根目录</h3>
+            <p class="settings-card-desc">这些目录及其子目录将被递归搜索以寻找 SKILL.md 文件。</p>
+            <div class="settings-list" id="roots-list">
+              ${config.scan_roots.map((r, i) => `
+                <div class="settings-item">
+                  <code class="path-code">${r}</code>
+                  <button class="btn-icon danger" onclick="removeConfigItem('scan_roots', ${i})">✕</button>
+                </div>
+              `).join('')}
+            </div>
+            <div class="settings-add-group">
+              <input type="text" id="add-root-input" placeholder="例如: ~/.custom/skills" class="settings-input">
+              <button class="btn primary" onclick="addConfigItem('scan_roots', 'add-root-input')">添加</button>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <h3 class="settings-card-title">忽略目录名</h3>
+            <p class="settings-card-desc">扫描时将跳过名称与以下模式匹配的任何目录。</p>
+            <div class="settings-list" id="ignores-list">
+              ${config.ignored_dirs.map((p, i) => `
+                <div class="settings-item">
+                  <span class="pattern-tag">${p}</span>
+                  <button class="btn-icon danger" onclick="removeConfigItem('ignored_dirs', ${i})">✕</button>
+                </div>
+              `).join('')}
+            </div>
+            <div class="settings-add-group">
+              <input type="text" id="add-ignore-input" placeholder="例如: tmp_files" class="settings-input">
+              <button class="btn primary" onclick="addConfigItem('ignored_dirs', 'add-ignore-input')">添加</button>
+            </div>
+          </section>
+        </div>
+        <div class="settings-footer">
+          <button class="btn primary" onclick="saveConfig()">保存配置</button>
+          <span id="config-status" class="status-text"></span>
+        </div>
+      `;
+    }
+
+    window.addConfigItem = (key, inputId) => {
+      const input = document.getElementById(inputId);
+      const val = input.value.trim();
+      if (!val) return;
+      if (!config[key].includes(val)) {
+        config[key].push(val);
+        draw();
+      }
+      input.value = '';
+    };
+
+    window.removeConfigItem = (key, index) => {
+      config[key].splice(index, 1);
+      draw();
+    };
+
+    window.saveConfig = async () => {
+      const status = document.getElementById('config-status');
+      status.textContent = '保存中...';
+      try {
+        const saveRes = await apiFetch('/api/config', 'POST', config);
+        if (saveRes.ok) {
+          toast('配置已保存', 'success');
+          status.textContent = '✓ 已保存';
+          fetchScan(); // Refresh data with new config
+        } else {
+          toast('保存失败: ' + saveRes.error, 'error');
+          status.textContent = '✕ 失败';
+        }
+      } catch (e) {
+        toast('网络错误', 'error');
+      }
+    };
+
+    draw();
+  } catch (e) {
+    el.innerHTML = errorHTML('无法加载配置: ' + e.message);
   }
 }
 

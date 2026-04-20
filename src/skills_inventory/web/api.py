@@ -11,6 +11,7 @@ from typing import Any
 
 from .. import git_ops
 from ..cache import CacheManager
+from ..config import ConfigManager
 from ..models import scan_result_to_dict
 from ..scanner import scan_roots
 from ..targets import TargetResolutionError, resolve_skill_target
@@ -249,3 +250,24 @@ def handle_resolve(body: dict, scan_root_paths: list[Path]) -> tuple[bytes, int]
 
     _log_op("resolve", {"removed": str(remove_path), "kept": str(keep_path), "symlink": symlink_created})
     return ok({"removed": str(remove_path), "kept": str(keep_path), "symlink": symlink_created}), 200
+
+
+# ── Handler: config ───────────────────────────────────────────────────────────
+
+
+def handle_get_config() -> tuple[bytes, int]:
+    cm = ConfigManager()
+    return ok(cm.to_dict()), 200
+
+
+def handle_update_config(body: dict) -> tuple[bytes, int]:
+    cm = ConfigManager()
+    
+    if "scan_roots" in body:
+        cm.config["scan_roots"] = body["scan_roots"]
+    if "ignored_dirs" in body:
+        cm.config["ignored_dirs"] = body["ignored_dirs"]
+    
+    cm.save()
+    _log_op("config_update", {"summary": "Settings updated via Dashboard"})
+    return ok(cm.to_dict()), 200

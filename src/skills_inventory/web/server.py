@@ -85,6 +85,10 @@ def _make_handler(scan_root_paths: list[Path], initial_refresh: bool = False) ->
                 body, status = _api.handle_scan(scan_root_paths, refresh=refresh, fast_mode=fast_mode)
                 self._send_api(body, status)
 
+            elif path == "/api/config":
+                body, status = _api.handle_get_config()
+                self._send_api(body, status)
+
             elif path == "/api/versions":
                 q = self._query()
                 name = q.get("name", "")
@@ -106,14 +110,18 @@ def _make_handler(scan_root_paths: list[Path], initial_refresh: bool = False) ->
 
         def do_POST(self) -> None:
             path = self._path_only()
-            body_dict = self._read_body()
+            payload = self._read_body()
 
             if path == "/api/upgrade":
-                body, status = _api.handle_upgrade(body_dict, scan_root_paths)
+                body, status = _api.handle_upgrade(payload, scan_root_paths)
                 self._send_api(body, status)
 
             elif path == "/api/conflict/resolve":
-                body, status = _api.handle_resolve(body_dict, scan_root_paths)
+                body, status = _api.handle_resolve(payload, scan_root_paths)
+                self._send_api(body, status)
+
+            elif path == "/api/config":
+                body, status = _api.handle_update_config(payload)
                 self._send_api(body, status)
 
             else:
