@@ -29,6 +29,7 @@ def scan_roots(
     ignored = ignored_dirs or DEFAULT_IGNORED_DIRS
     start = time.monotonic()
     result = ScanResult()
+    visited: set[tuple[int, int]] = set()
 
     for root in roots:
         root_path = root.expanduser().resolve()
@@ -39,28 +40,59 @@ def scan_roots(
         stack = [root_path]
         while stack:
             current = stack.pop()
+            try:
+                stat_info = current.stat()
+            except OSError as exc:
+                result.warnings.append(f"Cannot stat directory: {current} ({exc})")
+                continue
+
+            identity = (stat_info.st_dev, stat_info.st_ino)
+            if identity in visited:
+                continue
+            visited.add(identity)
+
             result.summary.scanned_dirs += 1
             if current.name in ignored:
                 continue
 
             skill_md = current / "SKILL.md"
             if skill_md.is_file():
+                error_text = None
+                last_modified = ""
+                skill_hash = ""
+                try:
+                    last_modified = _file_mtime_iso(skill_md)
+                    skill_hash = _file_hash(skill_md)
+                except OSError as exc:
+                    error_text = f"metadata_error: {exc}"
+
                 result.skills.append(
                     SkillRecord(
                         name=current.name,
                         path=str(current.resolve()),
                         source_root=str(root_path),
                         skill_md_path=str(skill_md.resolve()),
-                        last_modified=_file_mtime_iso(skill_md),
-                        skill_md_hash=_file_hash(skill_md),
+                        last_modified=last_modified,
+                        skill_md_hash=skill_hash,
+                        error=error_text,
                     )
                 )
 
             if not recursive:
                 continue
 
-            for child in current.iterdir():
-                if child.is_dir() and (follow_symlinks or not child.is_symlink()):
+            try:
+                children = list(current.iterdir())
+            except OSError as exc:
+                result.warnings.append(f"Cannot list directory: {current} ({exc})")
+                continue
+
+            for child in children:
+                if child.name in ignored:
+                    continue
+                if child.is_symlink() and not follow_symlinks:
+                    continue
+                if child.is_dir():
                     stack.append(child)
 
     result.summary.total_skills = len(result.skills)
