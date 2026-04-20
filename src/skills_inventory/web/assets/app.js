@@ -302,23 +302,30 @@ function renderConflicts(el) {
     <div class="conflict-list">
       ${conflicts.map((c, i) => `
         <div class="conflict-group">
-          <div class="conflict-group-header" onclick="startWizard(${i})">
+          <div class="conflict-group-header">
             <span class="badge badge-conflict"><span class="dot"></span>${c.count} 个重复</span>
             <span class="conflict-group-name">${escapeHTML(c.name)}</span>
-            <span class="btn btn-resolve" style="margin-left:auto">引导解决 →</span>
+            <button class="btn btn-resolve" onclick="startWizard(${i})" style="margin-left:auto">向导处理 →</button>
           </div>
           <div class="conflict-path-list">
-            ${c.paths.map(p => `<div class="conflict-path-item">${escapeHTML(shortenPath(p))}</div>`).join('')}
+            ${c.paths.map(p => `
+              <div class="conflict-path-item">
+                <code class="path-code-small">${escapeHTML(shortenPath(p))}</code>
+                <div class="quick-actions">
+                  <span class="quick-label">设为唯一并:</span>
+                  <button class="btn-mini success" onclick="quickResolve(${i}, '${escapeHTML(p)}', true)" title="保留此版本，其他路径创建软链接">● 软链其他</button>
+                  <button class="btn-mini danger" onclick="quickResolve(${i}, '${escapeHTML(p)}', false)" title="保留此版本，直接删除其他冲突路径">✕ 删除其他</button>
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
       `).join('')}
     </div>
   `;
 }
-
 function startWizard(index) {
   const groups = currentScan.conflicts.map(c => {
-    // Attach skill info to each path
     const paths = c.paths.map(p => {
       const skill = currentScan.skills.find(s => s.path === p && s.name === c.name);
       return { path: p, skill };
@@ -327,6 +334,33 @@ function startWizard(index) {
   });
   conflictWizard = { groups, index, selectedKeep: null };
   renderConflicts(document.getElementById('content'));
+}
+
+async function quickResolve(index, keepPath, symlink) {
+  const group = currentScan.conflicts[index];
+  const removes = group.paths.filter(p => p !== keepPath);
+  
+  if (!confirm(`确定要保留此版本并${symlink ? '软链' : '删除'}其他 ${removes.length} 个版本吗？\n\n保留路径: ${shortenPath(keepPath)}`)) return;
+
+  const btn = event.currentTarget;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '处理中...';
+
+  try {
+    for (const removePath of removes) {
+      await apiFetch('/api/conflict/resolve', 'POST', {
+        keep_path: keepPath,
+        remove_path: removePath,
+        symlink: symlink
+      });
+    }
+    toast(`已成功解决 "${group.name}" 的冲突`, 'success');
+  } catch (e) {
+    toast('处理失败: ' + e.message, 'error');
+  } finally {
+    await fetchScan();
+  }
 }
 
 function renderWizard(el) {

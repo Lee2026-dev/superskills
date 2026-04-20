@@ -490,16 +490,91 @@ body {
   cursor: pointer;
 }
 .conflict-group-name { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-1); }
-.conflict-path-list { padding: 12px 18px; display: flex; flex-direction: column; gap: 6px; }
+.conflict-path-list { padding: 8px 0; display: flex; flex-direction: column; }
 .conflict-path-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 18px;
+  border-bottom: 1px solid rgba(0,0,0,0.03);
+  transition: background 0.2s ease, border-color 0.2s;
+  position: relative;
+}
+.conflict-path-item:last-child { border-bottom: none; }
+.conflict-path-item:hover {
+  background: rgba(0,0,0,0.02);
+  border-color: var(--accent-dim);
+}
+
+.path-code-small {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-2);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
 }
-.conflict-path-item::before { content: '↳'; color: var(--danger); }
+.conflict-path-item:hover .path-code-small { color: var(--text-1); }
+
+.quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transform: translateX(10px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+.conflict-path-item:hover .quick-actions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.quick-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  margin-right: 4px;
+}
+
+.btn-mini {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+.btn-mini.success {
+  background: var(--success-dim);
+  color: #1a8e6d;
+  border-color: rgba(45, 212, 160, 0.15);
+}
+.btn-mini.success:hover {
+  background: var(--success);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(45,212,160,0.3);
+}
+.btn-mini.danger {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border-color: rgba(242, 92, 84, 0.15);
+}
+.btn-mini.danger:hover {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(242,92,84,0.3);
+}
 
 /* ── Guided wizard ────────────────────────────────────────────────────────── */
 .stepper {

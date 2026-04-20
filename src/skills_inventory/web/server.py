@@ -33,12 +33,16 @@ def _make_handler(scan_root_paths: list[Path], initial_refresh: bool = False) ->
         # ── helpers ──
 
         def _send(self, body: bytes, status: int = 200, content_type: str = "application/json") -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                # Client closed the connection prematurely, ignore
+                pass
 
         def _send_api(self, body: bytes, status: int) -> None:
             self._send(body, status, "application/json")
