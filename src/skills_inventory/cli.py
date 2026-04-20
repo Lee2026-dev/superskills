@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import webbrowser
 from pathlib import Path
 
 from . import git_ops
@@ -11,6 +12,8 @@ from .versions import highest_tag, normalize_tag, parse_semver, sort_semver_tags
 
 DEFAULT_SCAN_ROOTS = [Path("~/.codex/skills"), Path("~/.agents/skills"), Path("~/skills")]
 DEFAULT_OUTPUT = Path("~/.agents/superskills.json")
+DEFAULT_SERVE_PORT = 8080
+DEFAULT_SERVE_HOST = "127.0.0.1"
 
 
 def _resolve_target_or_error(name: str, path: str | None) -> Path | None:
@@ -119,6 +122,29 @@ def _handle_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_serve(args: argparse.Namespace) -> int:
+    from .web.server import serve
+
+    host = args.host
+    port = args.port
+    url = f"http://{host}:{port}"
+
+    print(f"SuperSkills Dashboard running at {url}")
+    print("Press Ctrl+C to stop.")
+
+    if not args.no_open:
+        webbrowser.open(url)
+
+    httpd = serve(DEFAULT_SCAN_ROOTS, host=host, port=port)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nDashboard stopped.")
+    finally:
+        httpd.server_close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="skills-inventory")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -134,6 +160,11 @@ def main(argv: list[str] | None = None) -> int:
     mode = upgrade_parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--to")
     mode.add_argument("--latest", action="store_true")
+
+    serve_parser = subparsers.add_parser("serve", help="Start the browser dashboard")
+    serve_parser.add_argument("--port", type=int, default=DEFAULT_SERVE_PORT)
+    serve_parser.add_argument("--host", default=DEFAULT_SERVE_HOST)
+    serve_parser.add_argument("--no-open", action="store_true", help="Don't open browser automatically")
 
     args = parser.parse_args(argv)
 
@@ -158,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "upgrade":
         return _handle_upgrade(args)
+
+    if args.command == "serve":
+        return _handle_serve(args)
 
     return 1
 
