@@ -25,14 +25,18 @@ def test_scan_writes_default_json_and_prints_summary(monkeypatch, tmp_path, caps
     assert output_file.exists()
 
     payload = json.loads(output_file.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] == "1.1"
     assert payload["summary"]["total_skills"] == 1
     assert payload["skills"][0]["name"] == "brainstorming"
+    assert payload["skills"][0]["current_version"] == "unknown"
+    assert payload["skills"][0]["latest_version"] == "unknown"
 
     stdout = capsys.readouterr().out
     assert "total_skills=1" in stdout
     assert "skills:" in stdout
     assert "| Name" in stdout
+    assert "Current Version" in stdout
+    assert "Latest Version" in stdout
     assert "| brainstorming" in stdout
     assert "| No" in stdout
     assert "conflicts:" in stdout

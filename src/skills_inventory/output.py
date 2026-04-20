@@ -41,6 +41,8 @@ def print_summary(result: ScanResult) -> None:
     skill_rows = [
         [
             skill.name,
+            skill.current_version,
+            skill.latest_version,
             "Yes" if skill.has_conflict else "No",
             skill.source_root,
             skill.path,
@@ -48,7 +50,12 @@ def print_summary(result: ScanResult) -> None:
         for skill in sorted(result.skills, key=lambda item: (item.name, item.path))
     ]
     print("skills:")
-    print(_render_table(["Name", "Conflict", "Source Root", "Path"], skill_rows))
+    print(
+        _render_table(
+            ["Name", "Current Version", "Latest Version", "Conflict", "Source Root", "Path"],
+            skill_rows,
+        )
+    )
 
     conflict_rows = [
         [item.name, str(item.count), "; ".join(item.paths)]

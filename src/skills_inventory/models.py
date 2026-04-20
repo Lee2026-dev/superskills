@@ -12,6 +12,8 @@ class SkillRecord:
     skill_md_path: str
     last_modified: str
     skill_md_hash: str
+    current_version: str = "unknown"
+    latest_version: str = "unknown"
     has_conflict: bool = False
     error: str | None = None
 
@@ -41,7 +43,7 @@ class ScanResult:
 
 def scan_result_to_dict(result: ScanResult, scan_roots: list[str]) -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "generated_at": datetime.now().astimezone().isoformat(),
         "scan_roots": scan_roots,
         "settings": {
