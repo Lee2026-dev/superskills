@@ -6,7 +6,9 @@ import hashlib
 import time
 from collections import defaultdict
 
+from . import git_ops
 from .models import ConflictRecord, ScanResult, SkillRecord
+from .versions import highest_tag, normalize_tag, sort_semver_tags_desc
 
 DEFAULT_IGNORED_DIRS = {".git", "node_modules", "__pycache__", ".venv"}
 
@@ -18,6 +20,32 @@ def _file_hash(path: Path) -> str:
 
 def _file_mtime_iso(path: Path) -> str:
     return datetime.fromtimestamp(path.stat().st_mtime).astimezone().isoformat()
+
+
+def _resolve_versions_for_skill(skill_path: Path, warnings: list[str]) -> tuple[str, str]:
+    if not git_ops.is_git_repo(skill_path):
+        warnings.append(f"not a git repository: {skill_path}")
+        return ("unknown", "unknown")
+
+    current_version = "unknown"
+    latest_version = "unknown"
+
+    try:
+        git_ops.fetch_tags(skill_path)
+    except git_ops.GitCommandError as exc:
+        warnings.append(f"cannot fetch tags for {skill_path}: {exc}")
+        return (current_version, latest_version)
+
+    tags = git_ops.list_tags(skill_path)
+    latest = highest_tag(tags)
+    if latest is not None:
+        latest_version = latest
+
+    for tag in sort_semver_tags_desc(git_ops.tags_pointing_at_head(skill_path)):
+        current_version = normalize_tag(tag)
+        break
+
+    return (current_version, latest_version)
 
 
 def scan_roots(
@@ -66,6 +94,7 @@ def scan_roots(
                 except OSError as exc:
                     error_text = f"metadata_error: {exc}"
 
+                current_version, latest_version = _resolve_versions_for_skill(current, result.warnings)
                 result.skills.append(
                     SkillRecord(
                         name=current.name,
@@ -74,6 +103,8 @@ def scan_roots(
                         skill_md_path=str(skill_md.resolve()),
                         last_modified=last_modified,
                         skill_md_hash=skill_hash,
+                        current_version=current_version,
+                        latest_version=latest_version,
                         error=error_text,
                     )
                 )
