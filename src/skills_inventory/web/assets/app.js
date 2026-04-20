@@ -10,7 +10,11 @@
 let currentScan = null;
 let activeFilter = 'all';
 let scanInProgress = false;
+let scanQueued = false;
+let queuedForce = false;
+let queuedFast = true;
 let conflictWizard = null; // { groups, index, selectedKeep }
+let batchResolveState = null; // { running, total, done, success, failures, currentName }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -124,39 +128,57 @@ async function apiFetch(path, options = {}) {
 }
 
 async function fetchScan(force = false, fast = false) {
-  if (scanInProgress) return;
-  scanInProgress = true;
-
-  const btn = document.getElementById('scan-btn');
-  const lastScanEl = document.getElementById('last-scan');
-  if (btn) { 
-    btn.disabled = true; 
-    btn.innerHTML = fast 
-      ? '<span class="spin">↻</span> 快速加载中...' 
-      : '<span class="spin">↻</span> 同步数据中...'; 
+  if (scanInProgress) {
+    scanQueued = true;
+    queuedForce = queuedForce || force;
+    queuedFast = queuedFast && fast;
+    return;
   }
 
-  try {
-    let url = '/api/scan?_t=' + Date.now();
-    if (force) url += '&refresh=true';
-    if (fast) url += '&fast=true';
-    const result = await apiFetch(url);
-    if (result.ok) {
-      currentScan = result.data;
-      updateBadges();
-      if (lastScanEl) {
-        const type = fast ? '快速缓存' : '全量更新';
-        lastScanEl.textContent = `${type}完成 · ${currentScan.summary.duration_ms}ms`;
-      }
-      route();
-    } else {
-      toast('扫描失败: ' + result.error, 'error');
+  let runForce = force;
+  let runFast = fast;
+
+  while (true) {
+    scanInProgress = true;
+
+    const btn = document.getElementById('scan-btn');
+    const lastScanEl = document.getElementById('last-scan');
+    if (btn) { 
+      btn.disabled = true; 
+      btn.innerHTML = runFast
+        ? '<span class="spin">↻</span> 快速加载中...' 
+        : '<span class="spin">↻</span> 同步数据中...'; 
     }
-  } catch (e) {
-    toast('无法连接到 superskills 服务器', 'error');
-  } finally {
-    scanInProgress = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = '↻ 立即刷新'; }
+
+    try {
+      let url = '/api/scan?_t=' + Date.now();
+      if (runForce) url += '&refresh=true';
+      if (runFast) url += '&fast=true';
+      const result = await apiFetch(url);
+      if (result.ok) {
+        currentScan = result.data;
+        updateBadges();
+        if (lastScanEl) {
+          const type = runFast ? '快速缓存' : '全量更新';
+          lastScanEl.textContent = `${type}完成 · ${currentScan.summary.duration_ms}ms`;
+        }
+        route();
+      } else {
+        toast('扫描失败: ' + result.error, 'error');
+      }
+    } catch (e) {
+      toast('无法连接到 superskills 服务器', 'error');
+    } finally {
+      scanInProgress = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = '↻ 立即刷新'; }
+    }
+
+    if (!scanQueued) break;
+    runForce = queuedForce;
+    runFast = queuedFast;
+    scanQueued = false;
+    queuedForce = false;
+    queuedFast = true;
   }
 }
 
@@ -276,6 +298,128 @@ function renderFilteredSkills(skills) {
 
 // ── Conflicts ─────────────────────────────────────────────────────────────────
 
+function normalizePath(path) {
+  return String(path || '').replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function resolvePathPriority(path) {
+  const normalized = normalizePath(path);
+  if (normalized.includes('/.agents/skills/')) return 1;
+  if (normalized.includes('/.codex/skills/')) return 2;
+  if (normalized.includes('/.hermes/skills/')) return 3;
+  if (normalized.includes('/skills/')) return 4;
+  return 5;
+}
+
+function chooseKeepPath(conflict) {
+  const sortedPaths = [...(conflict?.paths || [])].sort((a, b) => a.localeCompare(b));
+  if (!sortedPaths.length) return null;
+
+  const preferredAgents = sortedPaths.find(
+    p => normalizePath(p).endsWith(`/.agents/skills/${conflict.name}`)
+  );
+  if (preferredAgents) return preferredAgents;
+
+  const roots = new Set();
+  for (const p of sortedPaths) {
+    const skill = currentScan.skills.find(s => s.name === conflict.name && s.path === p);
+    if (skill?.source_root) roots.add(normalizePath(skill.source_root));
+  }
+
+  if (roots.size === 1) {
+    const onlyRoot = [...roots][0];
+    const sameRootSkillsPath = `${onlyRoot}/skills/${conflict.name}`;
+    const preferredSameRoot = sortedPaths.find(p => normalizePath(p) === sameRootSkillsPath);
+    if (preferredSameRoot) return preferredSameRoot;
+  }
+
+  return sortedPaths.sort((a, b) => {
+    const pa = resolvePathPriority(a);
+    const pb = resolvePathPriority(b);
+    if (pa !== pb) return pa - pb;
+    return a.localeCompare(b);
+  })[0];
+}
+
+function buildBulkResolveOps(conflicts) {
+  const operations = [];
+  const orderedConflicts = [...(conflicts || [])].sort((a, b) => a.name.localeCompare(b.name));
+  for (const conflict of orderedConflicts) {
+    const keepPath = chooseKeepPath(conflict);
+    if (!keepPath) continue;
+    for (const removePath of conflict.paths) {
+      if (removePath === keepPath) continue;
+      operations.push({ name: conflict.name, keepPath, removePath });
+    }
+  }
+  return operations;
+}
+
+async function resolveAllConflicts() {
+  const conflicts = currentScan?.conflicts || [];
+  if (!conflicts.length) {
+    toast('没有可处理的冲突', 'info');
+    return;
+  }
+  if (batchResolveState?.running) return;
+
+  const operations = buildBulkResolveOps(conflicts);
+  if (!operations.length) {
+    toast('没有可执行的冲突操作', 'info');
+    return;
+  }
+
+  const shouldContinue = confirm(
+    `将一键处理 ${conflicts.length} 组冲突，并把 ${operations.length} 个重复路径改为软链接。\n\n是否继续？`
+  );
+  if (!shouldContinue) return;
+
+  batchResolveState = {
+    running: true,
+    total: operations.length,
+    done: 0,
+    success: 0,
+    failures: [],
+    currentName: '',
+  };
+  renderConflicts(document.getElementById('content'));
+
+  for (const op of operations) {
+    batchResolveState.currentName = op.name;
+    try {
+      const result = await apiFetch('/api/conflict/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          keep_path: op.keepPath,
+          remove_path: op.removePath,
+          symlink: true,
+        }),
+      });
+      if (result.ok) {
+        batchResolveState.success += 1;
+      } else {
+        batchResolveState.failures.push({ ...op, error: result.error || '未知错误' });
+      }
+    } catch (e) {
+      batchResolveState.failures.push({ ...op, error: e.message || '请求失败' });
+    }
+    batchResolveState.done += 1;
+    renderConflicts(document.getElementById('content'));
+  }
+
+  const failedCount = batchResolveState.failures.length;
+  const successCount = batchResolveState.success;
+  if (failedCount > 0) {
+    console.error('bulk conflict resolve failures', batchResolveState.failures);
+    toast(`一键解决完成：成功 ${successCount}，失败 ${failedCount}`, 'error');
+  } else {
+    toast(`一键解决完成：成功 ${successCount}，失败 0`, 'success');
+  }
+
+  batchResolveState = null;
+  await fetchScan();
+}
+
 function renderConflicts(el) {
   if (!currentScan) { el.innerHTML = loadingHTML(); return; }
   const { conflicts } = currentScan;
@@ -294,18 +438,38 @@ function renderConflicts(el) {
     return;
   }
 
+  const running = Boolean(batchResolveState?.running);
+  const total = batchResolveState?.total || 0;
+  const done = batchResolveState?.done || 0;
+  const progress = total > 0 ? Math.floor((done / total) * 100) : 0;
+  const progressBlock = running ? `
+    <div class="conflict-batch-progress">
+      <div class="conflict-batch-progress-top">
+        <div class="progress-label">正在处理 ${done} / ${total}</div>
+        <div class="progress-label">${progress}%</div>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${progress}%"></div></div>
+      <div class="progress-sub">当前冲突: ${escapeHTML(batchResolveState.currentName || '—')}</div>
+    </div>
+  ` : '';
+
   el.innerHTML = `
     <div class="section-hdr">
       <div class="section-title">冲突 Skill</div>
       <div class="section-count">${conflicts.length} 组</div>
+      <div class="section-hdr-actions">
+        <button class="btn btn-resolve" onclick="resolveAllConflicts()" ${running ? 'disabled' : ''}>
+          ${running ? '<span class="spin">↻</span> 处理中...' : '一键解决冲突'}
+        </button>
+      </div>
     </div>
+    ${progressBlock}
     <div class="conflict-list">
       ${conflicts.map((c, i) => `
         <div class="conflict-group">
           <div class="conflict-group-header">
             <span class="badge badge-conflict"><span class="dot"></span>${c.count} 个重复</span>
             <span class="conflict-group-name">${escapeHTML(c.name)}</span>
-            <button class="btn btn-resolve" onclick="startWizard(${i})" style="margin-left:auto">向导处理 →</button>
           </div>
           <div class="conflict-path-list">
             ${c.paths.map(p => `
@@ -343,17 +507,22 @@ async function quickResolve(index, keepPath, symlink) {
   if (!confirm(`确定要保留此版本并${symlink ? '软链' : '删除'}其他 ${removes.length} 个版本吗？\n\n保留路径: ${shortenPath(keepPath)}`)) return;
 
   const btn = event.currentTarget;
-  const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '处理中...';
 
   try {
     for (const removePath of removes) {
-      await apiFetch('/api/conflict/resolve', 'POST', {
-        keep_path: keepPath,
-        remove_path: removePath,
-        symlink: symlink
+      const result = await apiFetch('/api/conflict/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          keep_path: keepPath,
+          remove_path: removePath,
+          symlink: symlink,
+        }),
       });
+      if (!result.ok) {
+        throw new Error(result.error || '未知错误');
+      }
     }
     toast(`已成功解决 "${group.name}" 的冲突`, 'success');
   } catch (e) {

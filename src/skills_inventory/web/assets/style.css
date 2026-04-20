@@ -366,6 +366,7 @@ body {
   padding: 1px 8px;
   border-radius: 20px;
 }
+.section-hdr-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
 /* ── Skills table ─────────────────────────────────────────────────────────── */
 .skills-table {
@@ -471,6 +472,43 @@ body {
 
 /* ── Conflict list ────────────────────────────────────────────────────────── */
 .conflict-list { display: flex; flex-direction: column; gap: 12px; }
+.conflict-batch-progress {
+  background: var(--surface);
+  border: 1px solid rgba(242,92,84,0.22);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.conflict-batch-progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.progress-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.progress-track {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--content-bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--danger), #f58a7f);
+  transition: width 0.18s ease;
+}
+.progress-sub {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
 .conflict-group {
   background: var(--surface);
   border: 1px solid rgba(242,92,84,0.25);
@@ -487,7 +525,6 @@ body {
   padding: 14px 18px;
   border-bottom: 1px solid rgba(242,92,84,0.12);
   background: rgba(242,92,84,0.025);
-  cursor: pointer;
 }
 .conflict-group-name { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-1); }
 .conflict-path-list { padding: 8px 0; display: flex; flex-direction: column; }
