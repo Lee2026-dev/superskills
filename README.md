@@ -18,6 +18,11 @@ English | [简体中文](README.zh-CN.md)
   - `__pycache__`
   - `.venv`
 - Preserves duplicate skill names and marks conflicts
+- Detects per-skill Git-based version status:
+  - `current_version` (SemVer tag pointing at current `HEAD`, or `unknown`)
+  - `latest_version` (highest SemVer tag after fetching tags, or `unknown`)
+- Lists available versions from Git tags for an installed skill
+- Upgrades an installed skill to a specific tag or latest SemVer tag
 - Prints a terminal summary and writes JSON output to:
   - `~/.agents/superskills.json`
 
@@ -35,13 +40,23 @@ pip3 install -e .
 
 ```bash
 skills-inventory scan
+skills-inventory list-versions <name> [--path <abs-path>]
+skills-inventory upgrade <name> [--path <abs-path>] (--to <tag> | --latest)
 ```
 
 ### Dev Mode (without install)
 
 ```bash
 PYTHONPATH=src python3 -m skills_inventory.cli scan
+PYTHONPATH=src python3 -m skills_inventory.cli list-versions <name> [--path <abs-path>]
+PYTHONPATH=src python3 -m skills_inventory.cli upgrade <name> [--path <abs-path>] (--to <tag> | --latest)
 ```
+
+### Command Notes
+
+- `scan` now includes `current_version` and `latest_version` in terminal table and JSON.
+- `list-versions` fetches tags and prints SemVer versions in descending order.
+- `upgrade` refuses to run when the target repository has uncommitted changes.
 
 ## Output
 
@@ -81,8 +96,6 @@ tests/
 docs/
 ```
 
-## Current Scope (MVP)
+## Current Scope (v1)
 
-This version is discovery + inventory only (read-focused behavior).  
-Install/migrate/deduplicate/version-management workflows are intentionally deferred.
-
+This version covers discovery/inventory plus Git-tag-based version visibility and upgrade workflows.

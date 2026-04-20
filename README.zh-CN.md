@@ -18,6 +18,11 @@
   - `__pycache__`
   - `.venv`
 - 同名 skill 全部保留，并标记冲突
+- 提供基于 Git 的 skill 版本状态：
+  - `current_version`（当前 `HEAD` 命中的 SemVer tag，否则 `unknown`）
+  - `latest_version`（抓取 tags 后计算出的最高 SemVer，否则 `unknown`）
+- 支持查看已安装 skill 的可用版本（来自 Git tags）
+- 支持升级已安装 skill 到指定 tag 或最新 SemVer
 - 在终端输出汇总信息，并将 JSON 写入：
   - `~/.agents/superskills.json`
 
@@ -35,13 +40,23 @@ pip3 install -e .
 
 ```bash
 skills-inventory scan
+skills-inventory list-versions <name> [--path <绝对路径>]
+skills-inventory upgrade <name> [--path <绝对路径>] (--to <tag> | --latest)
 ```
 
 ### 开发模式（不安装）
 
 ```bash
 PYTHONPATH=src python3 -m skills_inventory.cli scan
+PYTHONPATH=src python3 -m skills_inventory.cli list-versions <name> [--path <绝对路径>]
+PYTHONPATH=src python3 -m skills_inventory.cli upgrade <name> [--path <绝对路径>] (--to <tag> | --latest)
 ```
+
+### 命令说明
+
+- `scan` 现在会在终端表格与 JSON 中默认输出 `current_version` 和 `latest_version`。
+- `list-versions` 会抓取 tags，并按 SemVer 从高到低输出版本。
+- `upgrade` 在目标仓库存在未提交改动时会拒绝执行。
 
 ## 输出内容
 
@@ -81,8 +96,6 @@ tests/
 docs/
 ```
 
-## 当前范围（MVP）
+## 当前范围（v1）
 
-当前版本仅覆盖“发现与盘点”（偏只读行为）。  
-安装/迁移/去重/版本管理等能力在后续迭代实现。
-
+当前版本已覆盖“发现与盘点”以及基于 Git tag 的版本查看与升级能力。
