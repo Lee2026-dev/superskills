@@ -23,6 +23,10 @@ English | [简体中文](README.zh-CN.md)
   - `latest_version` (highest SemVer tag after fetching tags, or `unknown`)
 - Lists available versions from Git tags for an installed skill
 - Upgrades an installed skill to a specific tag or latest SemVer tag
+- Provides a browser-based Dashboard:
+  - Visual summary of all installed skills and their status
+  - Guided conflict resolution (compare paths, versions, and modified times)
+  - One-click upgrades to the latest SemVer version
 - Prints a terminal summary and writes JSON output to:
   - `~/.agents/superskills.json`
 
@@ -42,6 +46,7 @@ pip3 install -e .
 skills-inventory scan
 skills-inventory list-versions <name> [--path <abs-path>]
 skills-inventory upgrade <name> [--path <abs-path>] (--to <tag> | --latest)
+skills-inventory serve [--port <port>] [--host <host>] [--no-open]
 ```
 
 ### Dev Mode (without install)
@@ -50,6 +55,7 @@ skills-inventory upgrade <name> [--path <abs-path>] (--to <tag> | --latest)
 PYTHONPATH=src python3 -m skills_inventory.cli scan
 PYTHONPATH=src python3 -m skills_inventory.cli list-versions <name> [--path <abs-path>]
 PYTHONPATH=src python3 -m skills_inventory.cli upgrade <name> [--path <abs-path>] (--to <tag> | --latest)
+PYTHONPATH=src python3 -m skills_inventory.cli serve [--port <port>] [--no-open]
 ```
 
 ### Command Notes
@@ -57,6 +63,7 @@ PYTHONPATH=src python3 -m skills_inventory.cli upgrade <name> [--path <abs-path>
 - `scan` now includes `current_version` and `latest_version` in terminal table and JSON.
 - `list-versions` fetches tags and prints SemVer versions in descending order.
 - `upgrade` refuses to run when the target repository has uncommitted changes.
+- `serve` starts a local HTTP server and opens the dashboard UI (stdlib only, zero new dependencies).
 
 ## Output
 
@@ -92,6 +99,8 @@ src/skills_inventory/
   scanner.py
   models.py
   output.py
+  web/         # Dashboard API and routing
+    assets/    # Dashboard frontend assets
 tests/
 docs/
 ```

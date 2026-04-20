@@ -23,6 +23,10 @@
   - `latest_version`（抓取 tags 后计算出的最高 SemVer，否则 `unknown`）
 - 支持查看已安装 skill 的可用版本（来自 Git tags）
 - 支持升级已安装 skill 到指定 tag 或最新 SemVer
+- 提供浏览器端 Dashboard：
+  - 可视化展示所有已安装 skill 及其状态
+  - 引导式解决同名冲突（对比安装路径、版本与修改时间）
+  - 支持一键升级到最新 SemVer 版本
 - 在终端输出汇总信息，并将 JSON 写入：
   - `~/.agents/superskills.json`
 
@@ -42,6 +46,7 @@ pip3 install -e .
 skills-inventory scan
 skills-inventory list-versions <name> [--path <绝对路径>]
 skills-inventory upgrade <name> [--path <绝对路径>] (--to <tag> | --latest)
+skills-inventory serve [--port <端口>] [--host <地址>] [--no-open]
 ```
 
 ### 开发模式（不安装）
@@ -50,6 +55,7 @@ skills-inventory upgrade <name> [--path <绝对路径>] (--to <tag> | --latest)
 PYTHONPATH=src python3 -m skills_inventory.cli scan
 PYTHONPATH=src python3 -m skills_inventory.cli list-versions <name> [--path <绝对路径>]
 PYTHONPATH=src python3 -m skills_inventory.cli upgrade <name> [--path <绝对路径>] (--to <tag> | --latest)
+PYTHONPATH=src python3 -m skills_inventory.cli serve [--port <端口>] [--no-open]
 ```
 
 ### 命令说明
@@ -57,6 +63,7 @@ PYTHONPATH=src python3 -m skills_inventory.cli upgrade <name> [--path <绝对路
 - `scan` 现在会在终端表格与 JSON 中默认输出 `current_version` 和 `latest_version`。
 - `list-versions` 会抓取 tags，并按 SemVer 从高到低输出版本。
 - `upgrade` 在目标仓库存在未提交改动时会拒绝执行。
+- `serve` 启动本地 HTTP 服务器并自动打开 Dashboard 浏览器界面（基于 Python 标准库，零新依赖）。
 
 ## 输出内容
 
@@ -92,6 +99,8 @@ src/skills_inventory/
   scanner.py
   models.py
   output.py
+  web/         # Dashboard 后端接口与路由
+    assets/    # Dashboard 前端静态资源
 tests/
 docs/
 ```
