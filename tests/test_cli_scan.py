@@ -3,8 +3,9 @@ import json
 from skills_inventory.cli import main
 
 
-def test_scan_command_exits_zero(monkeypatch):
-    monkeypatch.setenv("HOME", "/tmp")
+def test_scan_command_exits_zero(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
     rc = main(["scan"])
     assert rc == 0
 

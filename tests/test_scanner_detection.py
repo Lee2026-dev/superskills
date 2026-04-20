@@ -18,3 +18,11 @@ def test_detects_skill_directories_by_skill_md(tmp_path: Path):
     assert record.path == str(skill_dir.resolve())
     assert record.source_root == str(root.resolve())
     assert record.skill_md_path == str((skill_dir / "SKILL.md").resolve())
+
+
+def test_missing_root_generates_warning(tmp_path: Path):
+    missing = tmp_path / "does-not-exist"
+    result = scan_roots([missing])
+    assert result.summary.total_skills == 0
+    assert len(result.warnings) == 1
+    assert "Root does not exist" in result.warnings[0]
