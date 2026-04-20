@@ -438,6 +438,7 @@ body {
 .badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .badge-current  { background: var(--success-dim); color: var(--success); }
 .badge-update   { background: var(--warning-dim); color: #c8880a; }
+.badge-link     { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-weight: 500; }
 .badge-conflict { background: var(--danger-dim);  color: var(--danger); }
 .badge-unknown  { background: var(--content-bg);  color: var(--text-3); border: 1px solid var(--border); }
 
@@ -619,6 +620,25 @@ body {
   font-size: 11px;
   color: var(--danger);
 }
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11.5px;
+  color: var(--text-2);
+  margin-top: 8px;
+}
+.control-group input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--amber);
+  cursor: pointer;
+  margin: 0;
+}
+.control-group:hover { color: var(--text-1); }
 
 .pagination-row {
   display: flex;

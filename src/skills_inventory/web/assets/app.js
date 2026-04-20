@@ -357,6 +357,12 @@ function renderWizard(el) {
       <button class="btn btn-ghost" onclick="conflictWizard.selectedKeep=null;renderConflicts(document.getElementById('content'))">← 重新选择</button>
       <button class="btn btn-primary" onclick="confirmResolve('${escapeHTML(keepPath)}','${escapeHTML(removePath)}')">确认删除 →</button>
     </div>
+    <div style="margin-top:-10px;margin-bottom:20px;padding:0 4px">
+      <label class="control-group">
+        <input type="checkbox" id="resolve-symlink" checked>
+        <span>保持路径兼容性（在旧路径创建符号链接指向新位置）</span>
+      </label>
+    </div>
     ` : `
     <div class="action-bar">
       <div class="action-bar-info" style="color:var(--text-3)">点击上方任意一个安装版本，选择要<strong style="color:var(--text-1)">保留</strong>的那个。</div>
@@ -416,10 +422,12 @@ async function confirmResolve(keepPath, removePath) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spin">↻</span> 删除中...';
 
+  const symlink = document.getElementById('resolve-symlink')?.checked || false;
+
   try {
     const result = await apiFetch('/api/conflict/resolve', {
       method: 'POST',
-      body: JSON.stringify({ keep_path: keepPath, remove_path: removePath }),
+      body: JSON.stringify({ keep_path: keepPath, remove_path: removePath, symlink }),
     });
     if (result.ok) {
       toast(`已删除 ${shortenPath(removePath)}`, 'success');
@@ -579,8 +587,8 @@ function renderSkillsTable(skills) {
     return `
       <div class="${rowClass}">
         <div class="cell-name">
-          <div class="skill-name ${s.has_conflict ? 'conflict-name' : ''}">${escapeHTML(s.name)}</div>
-          <div class="skill-path">${escapeHTML(s.path)}</div>
+          <div class="skill-name ${s.has_conflict ? 'conflict-name' : ''}">${escapeHTML(s.name)} ${s.is_symlink ? '<span class="badge badge-link" style="font-size:9px;padding:1px 6px;margin-left:4px">软链接</span>' : ''}</div>
+          <div class="skill-path">${s.is_symlink ? '<span style="color:var(--accent)">🔗</span> ' : ''}${escapeHTML(s.path)}</div>
         </div>
         <div class="cell-source">${escapeHTML(root)}</div>
         <div class="cell-version">${s.current_version}</div>

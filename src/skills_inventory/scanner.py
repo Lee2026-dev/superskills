@@ -98,13 +98,14 @@ def scan_roots(
                 result.skills.append(
                     SkillRecord(
                         name=current.name,
-                        path=str(current.resolve()),
+                        path=str(current),
                         source_root=str(root_path),
-                        skill_md_path=str(skill_md.resolve()),
+                        skill_md_path=str(skill_md),
                         last_modified=last_modified,
                         skill_md_hash=skill_hash,
                         current_version=current_version,
                         latest_version=latest_version,
+                        is_symlink=current.is_symlink(),
                         error=error_text,
                     )
                 )

@@ -14,6 +14,7 @@ class SkillRecord:
     skill_md_hash: str
     current_version: str = "unknown"
     latest_version: str = "unknown"
+    is_symlink: bool = False
     has_conflict: bool = False
     error: str | None = None
 
