@@ -3,38 +3,163 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from . import git_ops
 from .output import print_summary, write_json
 from .scanner import scan_roots
-
+from .targets import TargetResolutionError, resolve_skill_target
+from .versions import highest_tag, normalize_tag, parse_semver, sort_semver_tags_desc
 
 DEFAULT_SCAN_ROOTS = [Path("~/.codex/skills"), Path("~/.agents/skills"), Path("~/skills")]
 DEFAULT_OUTPUT = Path("~/.agents/superskills.json")
+
+
+def _resolve_target_or_error(name: str, path: str | None) -> Path | None:
+    try:
+        return resolve_skill_target(name, path, DEFAULT_SCAN_ROOTS)
+    except TargetResolutionError as exc:
+        print(f"error: {exc}")
+        return None
+
+
+def _semver_tags_by_normalized(tags: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for tag in tags:
+        if parse_semver(tag) is None:
+            continue
+        normalized = normalize_tag(tag)
+        if normalized not in mapping:
+            mapping[normalized] = tag
+    return mapping
+
+
+def _handle_list_versions(args: argparse.Namespace) -> int:
+    target = _resolve_target_or_error(args.name, args.path)
+    if target is None:
+        return 2
+
+    if not git_ops.is_git_repo(target):
+        print(f"error: not a git repository: {target}")
+        return 2
+
+    try:
+        git_ops.fetch_tags(target)
+        ordered = sort_semver_tags_desc(git_ops.list_tags(target))
+        if not ordered:
+            print("error: no valid semver tags found")
+            return 2
+
+        current = {
+            normalize_tag(tag)
+            for tag in git_ops.tags_pointing_at_head(target)
+            if parse_semver(tag) is not None
+        }
+    except (git_ops.GitCommandError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 2
+
+    for tag in ordered:
+        normalized = normalize_tag(tag)
+        marker = "*" if normalized in current else " "
+        print(f"{marker} {normalized}")
+    return 0
+
+
+def _handle_upgrade(args: argparse.Namespace) -> int:
+    target = _resolve_target_or_error(args.name, args.path)
+    if target is None:
+        return 2
+
+    if not git_ops.is_git_repo(target):
+        print(f"error: not a git repository: {target}")
+        return 2
+
+    try:
+        if not git_ops.is_worktree_clean(target):
+            print(f"error: working tree is dirty: {target}")
+            return 2
+
+        git_ops.fetch_tags(target)
+        tags = git_ops.list_tags(target)
+        semver_tag_map = _semver_tags_by_normalized(tags)
+        if not semver_tag_map:
+            print("error: no valid semver tags found")
+            return 2
+
+        if args.to:
+            target_version = normalize_tag(args.to)
+            checkout_ref = semver_tag_map.get(target_version)
+            if checkout_ref is None:
+                print(f"error: tag not found: {args.to}")
+                return 2
+        else:
+            latest = highest_tag(list(semver_tag_map.values()))
+            if latest is None:
+                print("error: no valid semver tags found")
+                return 2
+            target_version = latest
+            checkout_ref = semver_tag_map[target_version]
+
+        current_versions = [
+            normalize_tag(tag)
+            for tag in git_ops.tags_pointing_at_head(target)
+            if parse_semver(tag) is not None
+        ]
+        current = current_versions[0] if current_versions else "unknown"
+        if current == target_version:
+            print(f"already at {target_version}")
+            return 0
+
+        git_ops.checkout_tag(target, checkout_ref)
+        commit = git_ops.head_commit(target)
+    except (git_ops.GitCommandError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 2
+
+    print(f"upgraded {args.name}: {current} -> {target_version} ({commit})")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="skills-inventory")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("scan")
+
+    list_versions_parser = subparsers.add_parser("list-versions")
+    list_versions_parser.add_argument("name")
+    list_versions_parser.add_argument("--path")
+
+    upgrade_parser = subparsers.add_parser("upgrade")
+    upgrade_parser.add_argument("name")
+    upgrade_parser.add_argument("--path")
+    mode = upgrade_parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--to")
+    mode.add_argument("--latest", action="store_true")
+
     args = parser.parse_args(argv)
 
-    if args.command != "scan":
-        return 1
+    if args.command == "scan":
+        result = scan_roots(DEFAULT_SCAN_ROOTS)
+        print_summary(result)
 
-    result = scan_roots(DEFAULT_SCAN_ROOTS)
-    print_summary(result)
+        output_path = DEFAULT_OUTPUT.expanduser()
+        try:
+            write_json(
+                result,
+                output_path=output_path,
+                scan_roots=[str(path.expanduser().resolve()) for path in DEFAULT_SCAN_ROOTS],
+            )
+        except OSError as exc:
+            print(f"error: cannot write inventory json to {output_path}: {exc}")
+            return 2
+        return 0
 
-    output_path = DEFAULT_OUTPUT.expanduser()
-    try:
-        write_json(
-            result,
-            output_path=output_path,
-            scan_roots=[str(path.expanduser().resolve()) for path in DEFAULT_SCAN_ROOTS],
-        )
-    except OSError as exc:
-        print(f"error: cannot write inventory json to {output_path}: {exc}")
-        return 2
+    if args.command == "list-versions":
+        return _handle_list_versions(args)
 
-    return 0
+    if args.command == "upgrade":
+        return _handle_upgrade(args)
+
+    return 1
 
 
 def run() -> None:
