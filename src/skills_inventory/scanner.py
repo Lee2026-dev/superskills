@@ -4,8 +4,9 @@ from datetime import datetime
 from pathlib import Path
 import hashlib
 import time
+from collections import defaultdict
 
-from .models import ScanResult, SkillRecord
+from .models import ConflictRecord, ScanResult, SkillRecord
 
 DEFAULT_IGNORED_DIRS = {".git", "node_modules", "__pycache__", ".venv"}
 
@@ -63,5 +64,22 @@ def scan_roots(
                     stack.append(child)
 
     result.summary.total_skills = len(result.skills)
+    by_name: dict[str, list[SkillRecord]] = defaultdict(list)
+    for skill in result.skills:
+        by_name[skill.name].append(skill)
+
+    for name, records in sorted(by_name.items()):
+        if len(records) > 1:
+            result.summary.conflict_names += 1
+            for record in records:
+                record.has_conflict = True
+            result.conflicts.append(
+                ConflictRecord(
+                    name=name,
+                    count=len(records),
+                    paths=[record.path for record in records],
+                )
+            )
+
     result.summary.duration_ms = int((time.monotonic() - start) * 1000)
     return result
