@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import git_ops
+from ..cache import CacheManager
 from ..models import scan_result_to_dict
 from ..scanner import scan_roots
 from ..targets import TargetResolutionError, resolve_skill_target
@@ -94,8 +96,10 @@ def _is_under_scan_roots(path: Path, scan_root_paths: list[Path]) -> bool:
 # ── Handler: scan ─────────────────────────────────────────────────────────────
 
 
-def handle_scan(scan_root_paths: list[Path]) -> tuple[bytes, int]:
-    result = scan_roots(scan_root_paths)
+def handle_scan(scan_root_paths: list[Path], refresh: bool = False, fast_mode: bool = False) -> tuple[bytes, int]:
+    cache = CacheManager()
+    result = scan_roots(scan_root_paths, cache_manager=cache, refresh=refresh, fast_mode=fast_mode)
+    cache.save()
     data = scan_result_to_dict(
         result,
         scan_roots=[str(p.expanduser().resolve()) for p in scan_root_paths],
@@ -205,6 +209,7 @@ def handle_upgrade(body: dict, scan_root_paths: list[Path]) -> tuple[bytes, int]
 def handle_resolve(body: dict, scan_root_paths: list[Path]) -> tuple[bytes, int]:
     keep_path_str = body.get("keep_path")
     remove_path_str = body.get("remove_path")
+    create_symlink = body.get("symlink", False)
 
     if not keep_path_str or not remove_path_str:
         return err("'keep_path' and 'remove_path' are required", "BAD_REQUEST")
@@ -233,5 +238,14 @@ def handle_resolve(body: dict, scan_root_paths: list[Path]) -> tuple[bytes, int]
     except OSError as exc:
         return err(f"failed to remove directory: {exc}", "GIT_ERROR")
 
-    _log_op("resolve", {"removed": str(remove_path), "kept": str(keep_path)})
-    return ok({"removed": str(remove_path), "kept": str(keep_path)}), 200
+    # Symlink creation
+    symlink_created = False
+    if create_symlink:
+        try:
+            os.symlink(str(keep_path), str(remove_path))
+            symlink_created = True
+        except OSError as exc:
+            return err(f"failed to create symbolic link: {exc}", "GIT_ERROR")
+
+    _log_op("resolve", {"removed": str(remove_path), "kept": str(keep_path), "symlink": symlink_created})
+    return ok({"removed": str(remove_path), "kept": str(keep_path), "symlink": symlink_created}), 200

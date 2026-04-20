@@ -90,10 +90,17 @@ All API responses use `Content-Type: application/json`.
 |--------|------|-------------|
 | `GET` | `/` | Serve `index.html` |
 | `GET` | `/assets/*` | Static assets (CSS, JS) |
-| `GET` | `/api/scan` | Run `scan_roots()`, return `ScanResult` as JSON |
-| `GET` | `/api/versions?name=X[&path=Y]` | List semver tags for a skill; `path` is optional — if omitted, resolves via scan roots same as CLI |
-| `POST` | `/api/upgrade` | Upgrade a skill; body: `{name, path?, to?: string, latest?: bool}` — exactly one of `to` or `latest` must be set |
-| `POST` | `/api/conflict/resolve` | Remove one of two conflicting installs; body: `{keep_path, remove_path}` |
+
+#### 4.1 `GET /api/scan?refresh=true&fast=true`
+- Scans root directories and returns full inventory.
+- `refresh=true`: Bypasses cache and forces `git fetch`.
+- `fast=true`: Skips network operations, returning cached git info immediately.
+
+#### 4.2 `POST /api/conflict/resolve`
+- Body: `{ "keep_path": "abs-path", "remove_path": "abs-path", "symlink": true }`
+- `symlink`: If true, replaces `remove_path` with a symbolic link to `keep_path`.
+- Returns: `{ "ok": true, "removed": "...", "kept": "...", "symlink": bool }`
+
 | `GET` | `/api/log` | Return in-memory log of operations performed this session |
 
 ### Error codes
@@ -161,7 +168,11 @@ Four-step guided wizard:
 List all detected conflict groups. User clicks one to begin resolution.
 
 ### Step 2 — Compare & choose
-Side-by-side card comparison showing for each installation:
+- **Resolution Wizard**: Progressive walkthrough for fixing naming conflicts.
+- **Resolution Strategies**:
+  - **Physical Delete**: Permanently remove the unwanted instance.
+  - **Symlink Swap**: Replace the redundant directory with a symbolic link to the kept version, maintaining path compatibility for legacy agents while centralizing the code.
+- **Instant Scan**: Hybrid loading model with immediate cached response followed by background refresh.
 - Full path
 - Current version & latest available version
 - Last modified date

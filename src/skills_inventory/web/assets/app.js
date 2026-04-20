@@ -14,10 +14,15 @@ let conflictWizard = null; // { groups, index, selectedKeep }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   buildShell();
   window.addEventListener('hashchange', route);
-  fetchScan();
+  
+  // Phase 1: Fast load (local cache only)
+  await fetchScan(false, true);
+  
+  // Phase 2: Async background update (full git check)
+  setTimeout(() => fetchScan(false, false), 100);
 });
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
@@ -114,20 +119,31 @@ async function apiFetch(path, options = {}) {
   return json;
 }
 
-async function fetchScan() {
+async function fetchScan(force = false, fast = false) {
   if (scanInProgress) return;
   scanInProgress = true;
 
   const btn = document.getElementById('scan-btn');
   const lastScanEl = document.getElementById('last-scan');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin">↻</span> 扫描中...'; }
+  if (btn) { 
+    btn.disabled = true; 
+    btn.innerHTML = fast 
+      ? '<span class="spin">↻</span> 快速加载中...' 
+      : '<span class="spin">↻</span> 同步数据中...'; 
+  }
 
   try {
-    const result = await apiFetch('/api/scan');
+    let url = '/api/scan?_t=' + Date.now();
+    if (force) url += '&refresh=true';
+    if (fast) url += '&fast=true';
+    const result = await apiFetch(url);
     if (result.ok) {
       currentScan = result.data;
       updateBadges();
-      if (lastScanEl) lastScanEl.textContent = `扫描完成 · ${currentScan.summary.duration_ms}ms`;
+      if (lastScanEl) {
+        const type = fast ? '快速缓存' : '全量更新';
+        lastScanEl.textContent = `${type}完成 · ${currentScan.summary.duration_ms}ms`;
+      }
       route();
     } else {
       toast('扫描失败: ' + result.error, 'error');
@@ -136,7 +152,7 @@ async function fetchScan() {
     toast('无法连接到 superskills 服务器', 'error');
   } finally {
     scanInProgress = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = '↻ 立即扫描'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '↻ 立即刷新'; }
   }
 }
 
@@ -431,12 +447,14 @@ async function confirmResolve(keepPath, removePath) {
     });
     if (result.ok) {
       toast(`已删除 ${shortenPath(removePath)}`, 'success');
+      const curIndex = conflictWizard.index;
       conflictWizard.selectedKeep = null;
-      const nextIndex = conflictWizard.index + 1;
       conflictWizard = null;
       await fetchScan();
-      if (currentScan.conflicts.length > 0 && nextIndex < currentScan.conflicts.length) {
-        startWizard(nextIndex);
+      if (currentScan.conflicts.length > 0 && curIndex < currentScan.conflicts.length) {
+        startWizard(curIndex);
+      } else if (currentScan.conflicts.length > 0) {
+        startWizard(0);
       } else {
         location.hash = '#conflicts';
       }

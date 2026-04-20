@@ -7,8 +7,12 @@ English | [简体中文](README.zh-CN.md)
 ## What It Does
 
 - Scans fixed roots recursively:
-  - `~/.codex/skills`
-  - `~/.agents/skills`
+  - `~/.codex`
+  - `~/.agents`
+  - `~/.skills`
+  - `~/.gemini`
+  - `~/.hermes`
+  - `~/.openclaw`
   - `~/skills`
 - Detects a skill only when a directory contains `SKILL.md`
 - Follows symlinks by default
@@ -24,11 +28,15 @@ English | [简体中文](README.zh-CN.md)
 - Lists available versions from Git tags for an installed skill
 - Upgrades an installed skill to a specific tag or latest SemVer tag
 - Provides a browser-based Dashboard:
-  - Visual summary of all installed skills and their status
-  - Guided conflict resolution (compare paths, versions, and modified times)
-  - One-click upgrades to the latest SemVer version
+  - **Instant Load**: Uses a two-phase "Fast-then-Full" scan strategy for sub-100ms response.
+  - **Caching**: Persistent JSON cache with smart TTL management.
+  - **Parallelization**: Multi-threaded Git operations for high-speed metadata retrieval.
+  - **Conflict Resolution**: Physical deletion or "Symlink Swap" to maintain multi-path compatibility.
+  - **Updates**: One-click upgrades to the latest SemVer version.
 - Prints a terminal summary and writes JSON output to:
   - `~/.agents/superskills.json`
+- Caches performance metadata to:
+  - `~/.agents/superskills_cache.json`
 
 ## Installation
 
@@ -43,10 +51,10 @@ pip3 install -e .
 ### Installed CLI
 
 ```bash
-skills-inventory scan
+skills-inventory scan [--refresh]
 skills-inventory list-versions <name> [--path <abs-path>]
 skills-inventory upgrade <name> [--path <abs-path>] (--to <tag> | --latest)
-skills-inventory serve [--port <port>] [--host <host>] [--no-open]
+skills-inventory serve [--port <port>] [--host <host>] [--no-open] [--refresh]
 ```
 
 ### Dev Mode (without install)
@@ -60,10 +68,10 @@ PYTHONPATH=src python3 -m skills_inventory.cli serve [--port <port>] [--no-open]
 
 ### Command Notes
 
-- `scan` now includes `current_version` and `latest_version` in terminal table and JSON.
+- `scan` now includes `current_version` and `latest_version`. Use `--refresh` to bypass cache.
 - `list-versions` fetches tags and prints SemVer versions in descending order.
 - `upgrade` refuses to run when the target repository has uncommitted changes.
-- `serve` starts a local HTTP server and opens the dashboard UI (stdlib only, zero new dependencies).
+- `serve` starts a local HTTP server. High performance via caching and parallel I/O.
 
 ## Output
 

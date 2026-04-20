@@ -5,12 +5,20 @@ import webbrowser
 from pathlib import Path
 
 from . import git_ops
+from .cache import CacheManager
 from .output import print_summary, write_json
 from .scanner import scan_roots
 from .targets import TargetResolutionError, resolve_skill_target
 from .versions import highest_tag, normalize_tag, parse_semver, sort_semver_tags_desc
 
-DEFAULT_SCAN_ROOTS = [Path("~/.codex/skills"), Path("~/.agents/skills"), Path("~/skills")]
+DEFAULT_SCAN_ROOTS = [
+    Path("~/.codex"),
+    Path("~/.agents"),
+    Path("~/.skills"),
+    Path("~/.gemini"),
+    Path("~/.hermes"),
+    Path("~/.openclaw"),
+]
 DEFAULT_OUTPUT = Path("~/.agents/superskills.json")
 DEFAULT_SERVE_PORT = 8080
 DEFAULT_SERVE_HOST = "127.0.0.1"
@@ -122,6 +130,27 @@ def _handle_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_scan(args: argparse.Namespace) -> int:
+    roots = [Path(r) for r in args.root] if args.root else DEFAULT_SCAN_ROOTS
+    cache = CacheManager()
+    result = scan_roots(roots, cache_manager=cache, refresh=args.refresh)
+    cache.save()
+    print_summary(result)
+
+    if args.json:
+        output_path = DEFAULT_OUTPUT.expanduser()
+        try:
+            write_json(
+                result,
+                output_path=output_path,
+                scan_roots=[str(path.expanduser().resolve()) for path in roots],
+            )
+        except OSError as exc:
+            print(f"error: cannot write inventory json to {output_path}: {exc}")
+            return 2
+    return 0
+
+
 def _handle_serve(args: argparse.Namespace) -> int:
     from .web.server import serve
 
@@ -135,7 +164,7 @@ def _handle_serve(args: argparse.Namespace) -> int:
     if not args.no_open:
         webbrowser.open(url)
 
-    httpd = serve(DEFAULT_SCAN_ROOTS, host=host, port=port)
+    httpd = serve(DEFAULT_SCAN_ROOTS, host=host, port=port, refresh=args.refresh)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -148,7 +177,11 @@ def _handle_serve(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="skills-inventory")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("scan")
+
+    args_scan = subparsers.add_parser("scan")
+    args_scan.add_argument("--root", action="append", help="Root directory to scan (can be repeated)")
+    args_scan.add_argument("--json", action="store_true", help="Output full inventory as JSON")
+    args_scan.add_argument("--refresh", action="store_true", help="Force rescan (bypass cache)")
 
     list_versions_parser = subparsers.add_parser("list-versions")
     list_versions_parser.add_argument("name")
@@ -161,28 +194,16 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--to")
     mode.add_argument("--latest", action="store_true")
 
-    serve_parser = subparsers.add_parser("serve", help="Start the browser dashboard")
-    serve_parser.add_argument("--port", type=int, default=DEFAULT_SERVE_PORT)
-    serve_parser.add_argument("--host", default=DEFAULT_SERVE_HOST)
-    serve_parser.add_argument("--no-open", action="store_true", help="Don't open browser automatically")
+    args_serve = subparsers.add_parser("serve", help="Start the browser dashboard")
+    args_serve.add_argument("--port", type=int, default=DEFAULT_SERVE_PORT)
+    args_serve.add_argument("--host", default=DEFAULT_SERVE_HOST)
+    args_serve.add_argument("--no-open", action="store_true", help="Don't open browser automatically")
+    args_serve.add_argument("--refresh", action="store_true", help="Force initial scan to bypass cache")
 
     args = parser.parse_args(argv)
 
     if args.command == "scan":
-        result = scan_roots(DEFAULT_SCAN_ROOTS)
-        print_summary(result)
-
-        output_path = DEFAULT_OUTPUT.expanduser()
-        try:
-            write_json(
-                result,
-                output_path=output_path,
-                scan_roots=[str(path.expanduser().resolve()) for path in DEFAULT_SCAN_ROOTS],
-            )
-        except OSError as exc:
-            print(f"error: cannot write inventory json to {output_path}: {exc}")
-            return 2
-        return 0
+        return _handle_scan(args)
 
     if args.command == "list-versions":
         return _handle_list_versions(args)

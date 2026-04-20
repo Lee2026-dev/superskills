@@ -30,8 +30,12 @@ Out of scope:
 
 ## 3. Scan Roots (MVP Fixed Set)
 
-- `~/.codex/skills`
-- `~/.agents/skills`
+- `~/.codex`
+- `~/.agents`
+- `~/.skills`
+- `~/.gemini`
+- `~/.hermes`
+- `~/.openclaw`
 - `~/skills`
 
 Notes:
@@ -138,7 +142,22 @@ Schema (informal):
 - JSON write failure: command exits non-zero with explicit path and reason.
 - Symlink loops: maintain visited identity (`realpath` and/or inode tuple) to avoid infinite recursion.
 
-## 9. Testing Strategy
+## 9. Performance & Caching
+
+### 9.1 Persistent Cache
+- Path: `~/.agents/superskills_cache.json`.
+- Contents: Per-skill metadata (mtime, bash, latest_version) and last_fetch_ts.
+- Logic: Skip `git fetch` if `last_fetch_ts` is within TTL (10 mins) and `SKILL.md` hash is unchanged.
+
+### 9.2 Parallel Processing
+- Discovery: Single-threaded filesystem walk (recursive).
+- Metadata Resolution: ThreadPoolExecutor for Git operations (I/O bound).
+
+### 9.3 Fast Scan Mode
+- Skip network completely: Uses only local cache and local git state.
+- Fallback: Returns cached `latest_version` even if expired to ensure instant UI response.
+
+## 10. Testing Strategy
 
 Unit tests:
 - Detect skill by `SKILL.md`.
@@ -170,6 +189,6 @@ Integration tests (temp dirs):
 ## 11. Next Iteration (Explicitly Deferred)
 
 - Unified runtime entry across agents.
-- Install/migrate/deduplicate operations.
-- Incremental cache and change reports.
-- Configurable scan roots and rule customization.
+- Automatic migration from legacy paths.
+- Configurable scan roots via file (currently hardcoded as defaults).
+- Advanced plugin/dependency graph analysis.

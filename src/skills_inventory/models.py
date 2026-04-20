@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 
 
-@dataclass(slots=True)
+@dataclass
 class SkillRecord:
     name: str
     path: str
@@ -19,14 +19,14 @@ class SkillRecord:
     error: str | None = None
 
 
-@dataclass(slots=True)
+@dataclass
 class ConflictRecord:
     name: str
     count: int
     paths: list[str]
 
 
-@dataclass(slots=True)
+@dataclass
 class Summary:
     total_skills: int = 0
     conflict_names: int = 0
@@ -34,7 +34,7 @@ class Summary:
     duration_ms: int = 0
 
 
-@dataclass(slots=True)
+@dataclass
 class ScanResult:
     skills: list[SkillRecord] = field(default_factory=list)
     conflicts: list[ConflictRecord] = field(default_factory=list)

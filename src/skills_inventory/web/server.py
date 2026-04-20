@@ -24,7 +24,7 @@ def _read_asset(filename: str) -> bytes:
     return (pkg / filename).read_bytes()
 
 
-def _make_handler(scan_root_paths: list[Path]) -> type[BaseHTTPRequestHandler]:
+def _make_handler(scan_root_paths: list[Path], initial_refresh: bool = False) -> type[BaseHTTPRequestHandler]:
     class _Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:  # noqa: A002
             # Suppress default request logging; dashboard keeps its own log.
@@ -79,7 +79,10 @@ def _make_handler(scan_root_paths: list[Path]) -> type[BaseHTTPRequestHandler]:
                     self._send_api(*_api.err(f"asset not found: {filename}", "NOT_FOUND"))
 
             elif path == "/api/scan":
-                body, status = _api.handle_scan(scan_root_paths)
+                q = self._query()
+                refresh = initial_refresh or q.get("refresh") == "true"
+                fast_mode = q.get("fast") == "true"
+                body, status = _api.handle_scan(scan_root_paths, refresh=refresh, fast_mode=fast_mode)
                 self._send_api(body, status)
 
             elif path == "/api/versions":
@@ -132,8 +135,9 @@ def serve(
     scan_root_paths: list[Path],
     host: str = "127.0.0.1",
     port: int = 8080,
+    refresh: bool = False,
 ) -> ThreadingHTTPServer:
     """Create and return a ready-to-run ThreadingHTTPServer."""
-    handler = _make_handler(scan_root_paths)
+    handler = _make_handler(scan_root_paths, refresh)
     server = ThreadingHTTPServer((host, port), handler)
     return server
